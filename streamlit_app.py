@@ -9,14 +9,14 @@ from pathlib import Path
 
 # Set page configuration
 st.set_page_config(
-    page_title="AI Image Generator",
+    page_title="AI Image Generator by Aditya",
     page_icon="🎨",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # Title and description
-st.title("🎨 AI-Powered Text-to-Image Generator")
+st.title("🎨 AI-Powered Text-to-Image Generator by Aditya")
 st.markdown("""
 Generate high-quality images from text descriptions using advanced AI models.
 **Features:**
@@ -133,5 +133,5 @@ st.markdown("""
 
 st.markdown("""
 ---
-**Created with ❤️ using Stable Diffusion and Streamlit**
+**Created with ❤️ by Aditya using Stable Diffusion and Streamlit**
 """)
