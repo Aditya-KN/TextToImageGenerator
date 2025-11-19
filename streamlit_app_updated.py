@@ -1,11 +1,21 @@
-
 import streamlit as st
 import torch
 from diffusers import StableDiffusionPipeline
-from PIL import Image
+from PIL import Image, ImageDraw
+import io
 import json
 from datetime import datetime
 from pathlib import Path
+
+# --------- 1. MODEL SETUP ---------
+@st.cache_resource(show_spinner=False)
+def load_pipeline():
+    model_id = "runwayml/stable-diffusion-v1-5"  # << You can change model/checkpoint here
+    pipe = StableDiffusionPipeline.from_pretrained(model_id)
+    pipe = pipe.to("cuda" if torch.cuda.is_available() else "cpu")
+    return pipe
+
+pipe = load_pipeline()
 
 # Set page configuration
 st.set_page_config(
@@ -26,26 +36,25 @@ Generate high-quality images from text descriptions using advanced AI models.
 - Multiple export formats (PNG, JPEG)
 - Metadata tracking
 """)
-
 st.markdown("---")
 
 # Sidebar controls
 with st.sidebar:
     st.header("⚙️ Generation Settings")
-    
+
     # Text prompt input
     prompt = st.text_area(
         "Enter your image description:",
         placeholder="e.g., A futuristic city at sunset with flying cars...",
         height=100
     )
-    
+
     # Style selection
     style = st.selectbox(
         "Select art style:",
         ["photorealistic", "artistic", "cartoon", "cinematic", "detailed"]
     )
-    
+
     # Number of images
     num_images = st.slider(
         "Number of images to generate:",
@@ -53,7 +62,7 @@ with st.sidebar:
         max_value=4,
         value=1
     )
-    
+
     # Quality settings
     st.subheader("Advanced Settings")
     num_steps = st.slider(
@@ -63,7 +72,7 @@ with st.sidebar:
         value=50,
         step=10
     )
-    
+
     guidance_scale = st.slider(
         "Guidance scale (higher = closer to prompt):",
         min_value=1.0,
@@ -71,7 +80,7 @@ with st.sidebar:
         value=7.5,
         step=0.5
     )
-    
+
     # Export options
     st.subheader("Export Options")
     export_formats = st.multiselect(
@@ -79,10 +88,10 @@ with st.sidebar:
         ["PNG", "JPEG"],
         default=["PNG", "JPEG"]
     )
-    
+
     add_watermark = st.checkbox("Add AI watermark", value=True)
     save_metadata = st.checkbox("Save metadata", value=True)
-    
+
     # Generate button
     generate_button = st.button("🚀 Generate Images", use_container_width=True)
 
@@ -94,19 +103,48 @@ if generate_button:
         with st.spinner(f"Generating {num_images} image(s) with {style} style..."):
             st.info(f"📝 Prompt: {prompt}")
             st.info(f"⏱️ Estimated time: ~{num_images * num_steps * 0.3 / 60:.1f} minutes")
-            
+
             # Create placeholder for images
             image_placeholders = st.columns(min(num_images, 2))
-            
-            # Generate images
+
+            # --------- 2. ACTUAL IMAGE GENERATION ---------
             for idx in range(num_images):
                 col = image_placeholders[idx % len(image_placeholders)]
                 with col:
                     with st.spinner(f"Image {idx+1}/{num_images}"):
-                        # Placeholder for actual generation
-                        st.success(f"✅ Image {idx+1} generated!")
-            
-            st.success(f"🎉 Successfully generated {num_images} image(s)!")
+                        with torch.autocast("cuda" if torch.cuda.is_available() else "cpu"):
+                            image = pipe(
+                                f"{prompt}, {style}",
+                                num_inference_steps=num_steps,
+                                guidance_scale=guidance_scale
+                            ).images[0]
+
+                        if add_watermark:
+                            draw = ImageDraw.Draw(image)
+                            watermark_text = "AI Generated"
+                            draw.text((10, image.height - 30), watermark_text, (255, 0, 0))
+
+                        st.image(image, caption=f"Image {idx+1}", use_column_width=True)
+                        for fmt in export_formats:
+                            img_bytes = io.BytesIO()
+                            image.save(img_bytes, format=fmt)
+                            st.download_button(
+                                label=f"Download as {fmt}",
+                                data=img_bytes.getvalue(),
+                                file_name=f"generated_{idx+1}.{fmt.lower()}",
+                                mime=f"image/{fmt.lower()}"
+                            )
+                        if save_metadata:
+                            metadata = {
+                                "prompt": prompt,
+                                "steps": num_steps,
+                                "guidance": guidance_scale,
+                                "style": style,
+                                "date": datetime.now().isoformat()
+                            }
+                            st.json(metadata)
+            # --------- END IMAGE GENERATION ---------
+        st.success(f"🎉 Successfully generated {num_images} image(s)!")
 
 # Information section
 st.markdown("---")
@@ -130,7 +168,6 @@ st.markdown("""
 - Experiment with guidance scale for different levels of adherence
 - Higher steps = better quality but longer generation time
 """)
-
 st.markdown("""
 ---
 **Created with ❤️ using Stable Diffusion and Streamlit**
